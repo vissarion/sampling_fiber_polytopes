@@ -30,3 +30,7 @@ add_test(NAME source_purity
          COMMAND ${CMAKE_COMMAND}
                  -DROOT=${CMAKE_SOURCE_DIR}
                  -P ${CMAKE_CURRENT_SOURCE_DIR}/check_purity.cmake)
+
+add_executable(test_affine_hull test_affine_hull.cpp)
+target_link_libraries(test_affine_hull PRIVATE secpoly_optoracle secpoly_core)
+add_test(NAME affine_hull COMMAND test_affine_hull)
