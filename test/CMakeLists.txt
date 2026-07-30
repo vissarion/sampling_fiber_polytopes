@@ -1,3 +1,4 @@
+# --- functional tests --------------------------------------------------------
 add_executable(test_respol_island test_respol_island.cpp)
 target_link_libraries(test_respol_island PRIVATE secpoly_optoracle)
 add_test(NAME respol_island COMMAND test_respol_island)
@@ -10,6 +11,10 @@ set_tests_properties(opt_oracle PROPERTIES
 
 # Compiled WITHOUT the respol include dirs, on purpose: it must succeed using
 # only the public headers.
+add_executable(test_affine_hull test_affine_hull.cpp)
+target_link_libraries(test_affine_hull PRIVATE secpoly_optoracle secpoly_core)
+add_test(NAME affine_hull COMMAND test_affine_hull)
+
 add_executable(test_no_cgal_leak test_no_cgal_leak.cpp)
 target_link_libraries(test_no_cgal_leak PRIVATE secpoly_core)
 add_test(NAME no_cgal_leak COMMAND test_no_cgal_leak)
@@ -31,14 +36,18 @@ add_test(NAME source_purity
                  -DROOT=${CMAKE_SOURCE_DIR}
                  -P ${CMAKE_CURRENT_SOURCE_DIR}/check_purity.cmake)
 
-add_executable(test_affine_hull test_affine_hull.cpp)
-target_link_libraries(test_affine_hull PRIVATE secpoly_optoracle secpoly_core)
-add_test(NAME affine_hull COMMAND test_affine_hull)
+add_executable(test_separation test_separation.cpp)
+target_link_libraries(test_separation PRIVATE secpoly_optoracle secpoly_core)
+add_test(NAME separation COMMAND test_separation)
 
 add_executable(test_bootstrap test_bootstrap.cpp)
 target_link_libraries(test_bootstrap PRIVATE secpoly_optoracle secpoly_core)
 add_test(NAME bootstrap COMMAND test_bootstrap)
 
-add_executable(test_separation test_separation.cpp)
-target_link_libraries(test_separation PRIVATE secpoly_optoracle secpoly_core)
-add_test(NAME separation COMMAND test_separation)
+add_executable(test_sampler_e2e test_sampler_e2e.cpp)
+target_link_libraries(test_sampler_e2e PRIVATE secpoly_optoracle secpoly_core)
+add_test(NAME sampler_e2e COMMAND test_sampler_e2e)
+
+add_executable(test_associahedron test_associahedron.cpp)
+target_link_libraries(test_associahedron PRIVATE secpoly_optoracle secpoly_core)
+add_test(NAME associahedron COMMAND test_associahedron)
