@@ -1,0 +1,19 @@
+# build trees
+build/
+build-*/
+compile_commands.json
+Testing/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# tooling caches
+.cache/
+
+# editor / OS noise
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
