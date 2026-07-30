@@ -34,3 +34,11 @@ add_test(NAME source_purity
 add_executable(test_affine_hull test_affine_hull.cpp)
 target_link_libraries(test_affine_hull PRIVATE secpoly_optoracle secpoly_core)
 add_test(NAME affine_hull COMMAND test_affine_hull)
+
+add_executable(test_bootstrap test_bootstrap.cpp)
+target_link_libraries(test_bootstrap PRIVATE secpoly_optoracle secpoly_core)
+add_test(NAME bootstrap COMMAND test_bootstrap)
+
+add_executable(test_separation test_separation.cpp)
+target_link_libraries(test_separation PRIVATE secpoly_optoracle secpoly_core)
+add_test(NAME separation COMMAND test_separation)
