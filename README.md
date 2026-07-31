@@ -1,134 +1,160 @@
 # sampling_secondary
 
-Uniform sampling from the **secondary polytope** Σ(A) of a point configuration
-`A = {a₁, …, a_m} ⊂ ℤ^d`, using only a linear-optimization oracle.
+`sampling_secondary` is a `C++` library for sampling from the secondary polytope
+`Sigma(A)` of a point configuration `A` in `R^d`. The vertices of `Sigma(A)` are the regular
+triangulations of `A` and its dimension is `m-d-1`, where `m` is the number of points. Neither a
+halfspace description nor a vertex list is available in general, since the number of
+triangulations is exponential in `m`, so the polytope is accessed exclusively through an
+optimization oracle.
 
-Σ(A) is the convex hull of the GKZ vectors of all triangulations of `A`. Its vertices correspond
-to the *regular* triangulations of `A` and its dimension is `n = m − d − 1`. The difficulty is
-that it is given only **implicitly**: the number of triangulations is exponential in `m`, and
-neither an H-representation nor a vertex list can be assumed.
+The oracle is obtained by using a cost vector as a lifting function: the induced regular
+subdivision is computed with [`respol`](https://github.com/vissarion/respol), and its GKZ vector
+maximizes the cost over `Sigma(A)`. A separation oracle is derived from it by a conditional
+gradient (Frank--Wolfe) method, and the random walks of
+[`volesti`](https://github.com/GeomScale/volesti) are run on the resulting body.
 
-This implements the three-step pipeline of the accompanying draft:
+Since the cost of one oracle call is governed by `d` and `m` and not by the dimension of
+`Sigma(A)`, the method applies to configurations for which enumerating the vertices is out of
+reach.
 
-| step | what | how |
-|---|---|---|
-| (a) | optimization oracle | lifting + regular triangulation, via [`respol`](https://github.com/vissarion/respol) |
-| (b) | separation oracle | away-step Frank–Wolfe on the projection problem — the linear subproblem *is* (a) |
-| (c) | sampling | ball walk, via [`volesti`](https://github.com/GeomScale/volesti) |
+## Compile and use
 
-Design rationale, the full Frank–Wolfe construction with its soundness and termination
-arguments, and hand-worked numerical examples are in [`DESIGN.md`](DESIGN.md).
+### Compile dependencies
 
-## Why sampling rather than enumeration
-
-`respol` can already *enumerate* the vertices of Σ(A), but its beneath-and-beyond driver keeps a
-triangulation of the n-dimensional hull in memory, whose full-cell count grows like `N^⌊n/2⌋`.
-That caps enumeration at around `n ≈ 10`.
-
-Sampling never builds a hull, so it reaches the regime where enumeration is impossible — in
-particular **small d, large m**, because the cost of one oracle call depends on `d` and `m`, not
-on `n`. At `d = 2, m = 50` you get `n = 47`: hopeless to enumerate, while each oracle call
-triangulates only 52 points in dimension 5.
-
-## Status
-
-Working and validated end to end. `ctest` runs 10 tests in ~4 s.
-
-- Sampling on the draft's Example 1 (`A = {1,2,4,6}`, Σ(A) a quadrilateral in ℝ⁴):
-  20 000 samples, **20000/20000 strictly inside**, **χ² = 35.8 on ~26 dof** against an independent
-  rejection sampler, mean error 0.11 % of span — from **423 oracle calls** plus 1.5 M lazy cache
-  hits.
-- Associahedron family (`A` = vertices of a convex n-gon, so Σ(A) is the Stasheff polytope):
-  vertex counts match **Catalan(n−2)** exactly for n = 4…7 — 2, 5, 14, 42 — with the right
-  dimension `n−3` each time.
-- Optimization oracle reproduces the draft's four GKZ vectors for Example 1 exactly, `simple.txt`
-  → 4 vertices and `cube3.txt` → 72/74 under random sweeps, matching `respol`'s own test suite.
-
-Not yet implemented: log-concave targets, hit-and-run / billiard walks (they need a boundary
-oracle), rounding, and the GLS ellipsoid reference oracle.
-
-## Dependencies and directory layout
-
-The CMake defaults assume this **sibling layout**. A clone with no siblings fails at configure
-time, so either reproduce it or override the paths.
+`respol` must be compiled first: its `external/leda/libleda.a` is linked here. Follow the
+instructions in the `respol` repository. `volesti` is header-only and needs no compilation.
+Besides those, you need `CGAL` (tested with 6.2, header-only), `GMP`, `MPFR` and the `Boost`
+headers. On a Debian or Ubuntu system:
 
 ```
-workspace/
-├── volesti/                      ← VOLESTI_ROOT   (default ../../volesti)
-├── cgal/                         ← pass -DCGAL_DIR explicitly
-└── sampling_fiber_polytopes/
-    ├── respol/                   ← RESPOL_ROOT    (default ../respol)
-    └── sampling_secondary/       ← this repository
+$ sudo apt install libgmp-dev libmpfr-dev libboost-dev
 ```
 
-All three are overridable cache variables:
+`Eigen` is taken from the copy `volesti` unpacks under `external/_deps`, from a system
+installation, or fetched, in that order. `lp_solve` is not required.
 
-```bash
-cmake -DRESPOL_ROOT=/path/to/respol \
-      -DVOLESTI_ROOT=/path/to/volesti \
-      -DCGAL_DIR=/path/to/cgal ..
-```
+### Directory layout
 
-| dependency | version tested | notes |
-|---|---|---|
-| respol | `develop` @ `de5004c` | must be built first — its `external/leda/libleda.a` is linked |
-| volesti | `low_volatility` branch | header-only; Eigen is taken from its `external/_deps/eigen-src` |
-| CGAL | 6.2 (header-only) | pass `-DCGAL_DIR` |
-| GMP, MPFR, Boost headers | system | `libgmp-dev libmpfr-dev libboost-dev` |
-| CMake | ≥ 3.20 | tested with 4.2 |
-| C++ | 17 | tested with GCC 15 |
-
-Eigen resolution order: `-DEIGEN_INCLUDE_DIR` → volesti's unpacked copy → system `Eigen3` →
-fetch 3.4.0. `lp_solve` is **not** required — the Frank–Wolfe design removes the LP dependency.
-
-## Build and test
-
-```bash
-mkdir -p build && cd build
-cmake -DCGAL_DIR=/path/to/cgal ..
-make -j"$(nproc)"
-ctest --output-on-failure
-```
-
-Two constraints the build enforces mechanically, both checked by `ctest`:
-
-- **`res_enum_functions.h` may be included by exactly one translation unit.** It has no include
-  guards, defines non-inline globals, reads globals the includer must define, and `#include`s a
-  `.cpp`. It is therefore isolated in `src/opt_oracle_respol.cpp` behind a PIMPL facade whose
-  public header contains no CGAL. Enforced by the `source_purity` and `no_cgal_leak` tests.
-- **Include order is load-bearing.** `respol/patches/include` must come *first*: both it and
-  `respol/external/kernel_d/include` provide `CGAL/Kernel_d/Point_d.h`, and only the patched copy
-  defines `set_index`/`set_hash`. Get it wrong and you see ~40 errors of the form
-  *"`CPoint_d` has no member named `set_index`"* deep inside respol. See `cmake/RespolIsland.cmake`.
-
-`respol` and `volesti` are consumed strictly **read-only** — this project never modifies either.
-The `source_purity` test enforces that.
-
-## Layout
+By default the sibling repositories are expected in the following arrangement:
 
 ```
-include/secpoly/
-  opt_oracle.h          PIMPL facade over respol — zero CGAL in this header
-  affine_hull.h         intrinsic chart; keeps volesti in ℝⁿ, never ℝ^m
-  rationalize.h         double ↔ exact-integer boundary
-  bootstrap.h           draft Lemma 4 — certified relative-interior point
-  separation_oracle.h   away-step Frank–Wolfe, with the lazy atom cache
-  secondary_body.h      the volesti convex-body concept
-src/opt_oracle_respol.cpp   the only TU that includes respol
-test/                       10 tests; see DESIGN.md §7 for the worked examples
+volesti/
+cgal/
+sampling_fiber_polytopes/
+    respol/
+    sampling_secondary/
 ```
 
-## Licensing
+Any other arrangement works if the paths are given explicitly:
 
-Released under the **GNU Lesser General Public License v3** (see `LICENSE`), matching `respol`
-and `volesti`, which this is a derivative work of.
+```
+$ cmake -DRESPOL_ROOT=/path/to/respol \
+        -DVOLESTI_ROOT=/path/to/volesti \
+        -DCGAL_DIR=/path/to/cgal ..
+```
 
-⚠️ **Note on LEDA.** `respol` links the LEDA *Free Edition*, whose terms ship only as
-`external/leda/LICENSE.pdf` and normally restrict commercial use. That does not affect the
-licensing of the source here, but it does constrain redistribution of built binaries — check
-those terms before distributing anything linked against LEDA.
+### Compile the sources
 
-LEDA is pulled in only because `respol` `#include`s `tropli/tropli_disc.cpp` unconditionally and
-LEDA installs a file-scope static initializer. The discriminant code path that actually uses it is
-never executed here (`polytope_type` is always 1, secondary). See `cmake/RespolIsland.cmake` for
-how the dependency could be dropped entirely.
+In a build directory execute:
+
+```
+$ cmake -DCGAL_DIR=_YOUR_CGAL_PATH_ ..
+$ make
+```
+
+The following command will execute the test-suite:
+
+```
+$ ctest --output-on-failure
+```
+
+Two constraints are enforced by the tests rather than by convention. The header
+`res_enum_functions.h` of `respol` may be included by exactly one translation unit, so it is
+isolated behind a facade whose public header contains no `CGAL`. The include directories of
+`respol` must be given in the order used by its own build, with `patches/include` first;
+otherwise the unpatched `CGAL/Kernel_d/Point_d.h` is found and compilation fails inside `respol`
+with errors about a missing member `set_index`. Neither `respol` nor `volesti` is modified by
+this project.
+
+## Use
+
+A configuration is given by its dimension and its points, with integer coordinates. The oracle,
+the affine hull of `Sigma(A)`, a certified relative-interior point and the separation oracle are
+built from it, and the body is then handed to a random walk of `volesti`:
+
+```cpp
+#include <secpoly/bootstrap.h>
+#include <secpoly/opt_oracle.h>
+#include <secpoly/secondary_body.h>
+#include <secpoly/separation_oracle.h>
+
+using namespace secpoly;
+
+std::vector<std::vector<long long>> A{{1}, {2}, {4}, {6}};   // d = 1, m = 4
+
+SecondaryOptOracle oracle(1, A);
+AffineHull          hull(1, A);
+BootstrapResult     boot = bootstrap(oracle, hull);
+
+auto sep = std::make_shared<SeparationOracle>(&oracle, hull, boot);
+SecondaryBody<Point> body(sep, boot.rho_simp);   // dimension() is m-d-1, not m
+
+uniform_sampling(points, body, rng, BallWalk(L), walk_length, n, start, burns);
+```
+
+Samples are produced in coordinates on the affine hull of `Sigma(A)` and are mapped back to GKZ
+vectors in `R^m` by `body.to_gkz()`. The optimization oracle may also be used on its own, to
+compute the regular triangulation induced by a lifting.
+
+The `proj` argument of `SecondaryOptOracle` selects which GKZ coordinates are kept. It defaults
+to all of them; a proper subset gives a projection of `Sigma(A)`.
+
+### Example
+
+For `A = {1,2,4,6}` the secondary polytope is a quadrilateral in `R^4`, whose four vertices are
+the GKZ vectors of the four triangulations of the interval `[1,6]`. Running the end-to-end test
+prints them together with the corresponding triangulations, and writes the sampled points to
+`samples.csv`:
+
+```
+(5,0,0,5)   {[1,6]}
+(1,5,0,4)   {[1,2],[2,6]}
+(3,0,5,2)   {[1,4],[4,6]}
+(1,3,4,2)   {[1,2],[2,4],[4,6]}
+```
+
+For collinear `A` the secondary polytope is combinatorially an `(m-2)`-cube, so this family
+gives instances of any dimension with a known vertex count, useful for validation and for
+scaling experiments.
+
+#### Credits
+
+Copyright (c) 2026 Vissarion Fisikopoulos
+
+Built on [`respol`](https://github.com/vissarion/respol) by Ioannis Z. Emiris, Vissarion
+Fisikopoulos, Christos Konaxis and Luis Peñaranda, and on
+[`volesti`](https://github.com/GeomScale/volesti), part of the
+[GeomScale](https://geomscale.github.io) project.
+
+You may redistribute or modify the software under the [GNU Lesser General Public
+License](LICENSE) as published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. It is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY.
+
+Note that `respol` links the LEDA Free Edition, whose terms are distributed with it and restrict
+some uses. This affects the redistribution of binaries linked against it, not the licensing of
+the sources here.
+
+#### Publications
+
+1. Sampling from secondary polytopes. *manuscript*
+
+2. An oracle-based, output sensitive algorithm for projections of resultant polytopes.
+   *I.Z. Emiris, V. Fisikopoulos, C. Konaxis, L. Peñaranda.*
+   International Journal of Computational Geometry and Applications, vol. 23, pp. 397-423,
+   World Scientific, 2013.
+   https://vissarion.github.io/publications/EFKP_IJCGA_13.pdf
+
+3. Discriminants, Resultants, and Multidimensional Determinants.
+   *I.M. Gelfand, M.M. Kapranov, A.V. Zelevinsky.* Birkhäuser, 1994.
+   Chapter 7 for secondary polytopes.
