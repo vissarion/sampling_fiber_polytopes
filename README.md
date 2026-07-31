@@ -1,7 +1,9 @@
-# sampling_secondary
+# Sampling Secondary and Fiber polytopes
 
-`sampling_secondary` is a `C++` library for sampling from the secondary polytope
-`Sigma(A)` of a point configuration `A` in `R^d`. The vertices of `Sigma(A)` are the regular
+`sampling_fiber_polytopes` is a `C++` library for sampling from the fiber and secondary polytopes.
+
+Currently it support sampling from a secondary polytope `Sigma(A)` of a point configuration 
+`A` in `R^d`. The vertices of `Sigma(A)` are the regular
 triangulations of `A` and its dimension is `m-d-1`, where `m` is the number of points. Neither a
 halfspace description nor a vertex list is available in general, since the number of
 triangulations is exponential in `m`, so the polytope is accessed exclusively through an
